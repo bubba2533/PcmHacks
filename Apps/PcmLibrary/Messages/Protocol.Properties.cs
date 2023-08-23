@@ -121,7 +121,7 @@ namespace PcmHacking
         /// </summary>
         public Response<UInt32> ParseUInt32FromBlockReadResponse(Message message)
         {
-            return ParseUInt32(message, BlockId.OperatingSystemIDCan);
+            return ParseUInt32Can(message, BlockId.OperatingSystemIDCan);
         }
 
         #region VIN

@@ -299,7 +299,7 @@ namespace PcmHacking
                 int retryCount = 0;
                 int startAddress = 0;
                 int bytesRemaining = pcmInfo.ImageSize;
-                int blockSize = this.vehicle.DeviceMaxReceiveSize; // allow space for the header and block checksum
+                int blockSize = this.vehicle.DeviceMaxReceiveSize - 5; // allow space for the header
                 if (blockSize > this.pcmInfo.KernelMaxBlockSize)
                 {
                     blockSize = this.pcmInfo.KernelMaxBlockSize;

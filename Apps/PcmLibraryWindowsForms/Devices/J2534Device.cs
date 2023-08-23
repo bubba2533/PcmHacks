@@ -61,8 +61,8 @@ namespace PcmHacking
             J2534Port.LoadedDevice = jport;
 
             // Reduced from 4096+12 for the MDI2
-            this.MaxSendSize = 4090;    // J2534 Standard is 4KB
-            this.MaxReceiveSize = 4090; // J2534 Standard is 4KB
+            this.MaxSendSize = 4095;    // J2534 Standard is 4KB
+            this.MaxReceiveSize = 4095; // J2534 Standard is 4KB
             this.Supports4X = true;
             this.SupportsSingleDpidLogging = true;
             this.SupportsStreamLogging = true;

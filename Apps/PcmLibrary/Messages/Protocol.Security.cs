@@ -129,7 +129,7 @@ namespace PcmHacking
 
             switch (unlockCode)
             {
-                case Security.AllowedCan:
+                case Mode.Seed + Mode.Response:
                     errorMessage = null;
                     return Response.Create(ResponseStatus.Success, true);
 

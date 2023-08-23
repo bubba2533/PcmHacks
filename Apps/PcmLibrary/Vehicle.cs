@@ -380,7 +380,7 @@ namespace PcmHacking
             }
 
             this.logger.AddDebugMessage("Sending unlock request (" + seedValue.ToString("X4") + ", " + key.ToString("X4") + ")");
-            Message unlockRequest = this.protocol.CreateUnlockRequest(key);
+            Message unlockRequest = this.protocol.CreateUnlockRequestCan(key);
             if (!await this.TrySendMessage(unlockRequest, "unlock request"))
             {
                 this.logger.AddDebugMessage("Unable to send unlock request.");
