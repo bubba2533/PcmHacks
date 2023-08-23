@@ -59,7 +59,7 @@ namespace PcmHacking
                 {
                     this.logger.AddUserMessage("4X communications disabled by configuration.");
                 }
-
+                
                 await this.vehicle.SendToolPresentNotification();
 
                 Response<byte[]> response;
@@ -243,6 +243,169 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Read the full contents of the PCM.
+        /// Assumes the PCM is unlocked and we're ready to go.
+        /// </summary>
+        public async Task<Response<Stream>> ReadContentsCan(CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Start with known state.
+                await this.vehicle.ForceSendToolPresentNotification();
+                this.vehicle.ClearDeviceMessageQueue();
+
+                Response<byte[]> response;
+
+                // execute read kernel
+                response = await vehicle.LoadKernelFromFile(this.pcmInfo.KernelFileName);
+                if (response.Status != ResponseStatus.Success)
+                {
+                    logger.AddUserMessage("Failed to load kernel from file.");
+                    return new Response<Stream>(response.Status, null);
+                }
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return Response.Create(ResponseStatus.Cancelled, (Stream)null);
+                }
+
+                await this.vehicle.SendToolPresentNotification();
+
+                if (!await this.vehicle.PCMExecuteCan(this.pcmInfo, response.Value, cancellationToken))
+                {
+                    logger.AddUserMessage("Failed to upload kernel to PCM");
+
+                    return new Response<Stream>(
+                        cancellationToken.IsCancellationRequested ? ResponseStatus.Cancelled : ResponseStatus.Error,
+                        null);
+                }
+
+                logger.AddUserMessage("Kernel uploaded to PCM succesfully. Requesting data...");
+
+                // Which flash chip?
+                await this.vehicle.SendToolPresentNotification();
+
+                FlashChip flashChip = FlashChip.Create(0x12345678, this.logger);
+                if (this.pcmInfo.FlashIDSupport)
+                {
+                    UInt32 chipId = await this.vehicle.QueryFlashChipId(cancellationToken);
+                    flashChip = FlashChip.Create(chipId, this.logger);
+                    logger.AddUserMessage("Flash chip: " + flashChip.ToString());
+                }
+
+                await this.vehicle.SetDeviceTimeout(TimeoutScenario.ReadMemoryBlock);
+
+                byte[] image = new byte[pcmInfo.ImageSize];
+                int retryCount = 0;
+                int startAddress = 0;
+                int bytesRemaining = pcmInfo.ImageSize;
+                int blockSize = this.vehicle.DeviceMaxReceiveSize; // allow space for the header and block checksum
+                if (blockSize > this.pcmInfo.KernelMaxBlockSize)
+                {
+                    blockSize = this.pcmInfo.KernelMaxBlockSize;
+                }
+
+                DateTime startTime = DateTime.MaxValue;
+                while (startAddress < pcmInfo.ImageSize)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        return Response.Create(ResponseStatus.Cancelled, (Stream)null);
+                    }
+
+                    // The read kernel needs a short message here for reasons unknown. Without it, it will RX 2 messages then drop one.
+                    await this.vehicle.ForceSendToolPresentNotification();
+
+                    if (startAddress + blockSize > pcmInfo.ImageSize)
+                    {
+                        blockSize = pcmInfo.ImageSize - startAddress;
+                    }
+
+                    if (blockSize < 1)
+                    {
+                        this.logger.AddUserMessage("Image download complete");
+                        break;
+                    }
+
+                    if (startTime == DateTime.MaxValue)
+                    {
+                        startTime = DateTime.Now;
+                    }
+
+                    Response<bool> readResponse = await TryReadBlock(
+                        image,
+                        blockSize,
+                        startAddress,
+                        startTime,
+                        cancellationToken);
+                    if (readResponse.Status != ResponseStatus.Success)
+                    {
+                        this.logger.AddUserMessage(
+                            string.Format(
+                                "Unable to read block from {0} to {1}",
+                                startAddress,
+                                (startAddress + blockSize) - 1));
+                        return new Response<Stream>(ResponseStatus.Error, null);
+                    }
+
+                    startAddress += blockSize;
+                    retryCount += readResponse.RetryCount;
+
+                    logger.StatusUpdateRetryCount((retryCount > 0) ? retryCount.ToString() + ((retryCount > 1) ? " Retries" : " Retry") : string.Empty);
+                }
+
+                logger.AddUserMessage("Read complete.");
+                Utility.ReportRetryCount("Read", retryCount, pcmInfo.ImageSize, this.logger);
+
+                if (this.pcmInfo.FlashCRCSupport && this.pcmInfo.FlashIDSupport)
+                {
+                    logger.AddUserMessage("Starting verification...");
+
+                    CKernelVerifier verifier = new CKernelVerifier(
+                        image,
+                        flashChip.MemoryRanges,
+                        this.vehicle,
+                        this.protocol,
+                        this.pcmInfo,
+                        this.logger);
+
+                    logger.StatusUpdateReset();
+
+                    if (await verifier.CompareRanges(
+                        image,
+                        BlockType.All,
+                        cancellationToken))
+                    {
+                        logger.AddUserMessage("The contents of the file match the contents of the PCM.");
+                    }
+                    else
+                    {
+                        logger.AddUserMessage("##############################################################################");
+                        logger.AddUserMessage("There are errors in the data that was read from the PCM. Do not use this file.");
+                        logger.AddUserMessage("##############################################################################");
+                    }
+                }
+
+                await this.vehicle.Cleanup(); // Not sure why this does not get called in the finally block on successfull read?
+
+                MemoryStream stream = new MemoryStream(image);
+                return new Response<Stream>(ResponseStatus.Success, stream);
+            }
+            catch (Exception exception)
+            {
+                this.logger.AddUserMessage("Something went wrong. " + exception.Message);
+                this.logger.AddDebugMessage(exception.ToString());
+                return new Response<Stream>(ResponseStatus.Error, null);
+            }
+            finally
+            {
+                // Sending the exit command at both speeds and revert to 1x.
+                await this.vehicle.Cleanup();
+                logger.StatusUpdateReset();
+            }
+        }
+
+        /// <summary>
         /// Try to read a block of PCM memory.
         /// </summary>
         private async Task<Response<bool>> TryReadBlock(
@@ -263,8 +426,8 @@ namespace PcmHacking
                 }
 
                 Response<byte[]> readResponse = await this.vehicle.ReadMemory(
-                    () => this.protocol.CreateReadRequest(startAddress, length),
-                    (payloadMessage) => this.protocol.ParsePayload(payloadMessage, length, startAddress),
+                    () => this.protocol.CreateReadRequestCan(startAddress, length),
+                    (payloadMessage) => this.protocol.ParsePayloadCan(payloadMessage, length, startAddress),
                     cancellationToken);
 
                 if(readResponse.Status != ResponseStatus.Success)

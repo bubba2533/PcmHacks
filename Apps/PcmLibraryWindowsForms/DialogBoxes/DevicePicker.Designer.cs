@@ -46,6 +46,7 @@ namespace PcmHacking
             this.status = new System.Windows.Forms.Label();
             this.enable4xReadWriteCheckBox = new System.Windows.Forms.CheckBox();
             this.optionsGroupBox = new System.Windows.Forms.GroupBox();
+            this.enableCanCheckBox = new System.Windows.Forms.CheckBox();
             this.categories.SuspendLayout();
             this.serialOptionsGroupBox.SuspendLayout();
             this.j2534OptionsGroupBox.SuspendLayout();
@@ -171,7 +172,7 @@ namespace PcmHacking
             // autoDetectButton
             // 
             this.autoDetectButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
-            this.autoDetectButton.Location = new System.Drawing.Point(13, 330);
+            this.autoDetectButton.Location = new System.Drawing.Point(13, 363);
             this.autoDetectButton.Name = "autoDetectButton";
             this.autoDetectButton.Size = new System.Drawing.Size(94, 23);
             this.autoDetectButton.TabIndex = 3;
@@ -207,7 +208,7 @@ namespace PcmHacking
             // testButton
             // 
             this.testButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
-            this.testButton.Location = new System.Drawing.Point(201, 330);
+            this.testButton.Location = new System.Drawing.Point(201, 363);
             this.testButton.Name = "testButton";
             this.testButton.Size = new System.Drawing.Size(94, 23);
             this.testButton.TabIndex = 4;
@@ -236,20 +237,32 @@ namespace PcmHacking
             // 
             // optionsGroupBox
             // 
+            this.optionsGroupBox.Controls.Add(this.enableCanCheckBox);
             this.optionsGroupBox.Controls.Add(this.enable4xReadWriteCheckBox);
             this.optionsGroupBox.Location = new System.Drawing.Point(12, 275);
             this.optionsGroupBox.Name = "optionsGroupBox";
-            this.optionsGroupBox.Size = new System.Drawing.Size(283, 39);
+            this.optionsGroupBox.Size = new System.Drawing.Size(283, 67);
             this.optionsGroupBox.TabIndex = 9;
             this.optionsGroupBox.TabStop = false;
             this.optionsGroupBox.Text = "Options";
+            // 
+            // enableCanCheckBox
+            // 
+            this.enableCanCheckBox.AutoSize = true;
+            this.enableCanCheckBox.Location = new System.Drawing.Point(7, 42);
+            this.enableCanCheckBox.Name = "enableCanCheckBox";
+            this.enableCanCheckBox.Size = new System.Drawing.Size(81, 17);
+            this.enableCanCheckBox.TabIndex = 9;
+            this.enableCanCheckBox.Text = "Enable Can";
+            this.enableCanCheckBox.UseVisualStyleBackColor = true;
+            this.enableCanCheckBox.CheckedChanged += new System.EventHandler(this.enableCan_CheckedChanged);
             // 
             // DevicePicker
             // 
             this.AcceptButton = this.okButton;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(407, 365);
+            this.ClientSize = new System.Drawing.Size(407, 398);
             this.Controls.Add(this.optionsGroupBox);
             this.Controls.Add(this.status);
             this.Controls.Add(this.testButton);
@@ -296,5 +309,6 @@ namespace PcmHacking
         private System.Windows.Forms.Label status;
         private System.Windows.Forms.CheckBox enable4xReadWriteCheckBox;
         private System.Windows.Forms.GroupBox optionsGroupBox;
+        private System.Windows.Forms.CheckBox enableCanCheckBox;
     }
 }

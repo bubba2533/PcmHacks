@@ -185,6 +185,11 @@ namespace PcmHacking
         public bool Enable4xReadWrite { get; set; }
 
         /// <summary>
+        /// Enable Disable CAN.
+        /// </summary>
+        public bool EnableCan { get; set; }
+
+        /// <summary>
         /// Constructor.
         /// </summary>
         public Device(ILogger logger)

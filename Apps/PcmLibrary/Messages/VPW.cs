@@ -137,6 +137,7 @@ namespace PcmHacking
 
         public const byte ClearDiagnosticTroubleCodes = 0x04;
         public const byte ClearDiagnosticInformation = 0x14;
+        public const byte ReadDataByIdentifier = 0x1A;
         public const byte ExitKernel = 0x20;
         public const byte GetPid = 0x22;
         public const byte GetRam = 0x23;
@@ -147,9 +148,11 @@ namespace PcmHacking
         public const byte ReadBlock = 0x3C;
         public const byte PCMUploadRequest = 0x34;
         public const byte PCMUpload = 0x36;
+        public const byte TestDevicePresentCan = 0x3E;
         public const byte TestDevicePresent = 0x3F;
         public const byte HighSpeedPrepare = 0xA0;
         public const byte HighSpeed = 0xA1;
+        public const byte ProgrammingMode = 0xA5;
     }
 
     /// <summary>
@@ -171,6 +174,10 @@ namespace PcmHacking
         public const byte SingleRow = 0x01;
         public const byte Stream1 = 0x14;
         public const byte Stream2= 0x24;
+
+        // Programming Mode
+        public const byte requestProgrammingMode = 0x01;
+        public const byte enableProgrammingMode = 0x03;
     }
 
     /// <summary>

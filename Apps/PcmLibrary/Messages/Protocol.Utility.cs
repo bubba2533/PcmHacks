@@ -121,6 +121,108 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Check for an accept/reject message with the given mode byte.
+        /// </summary>
+        /// <remarks>
+        /// TODO: Make this private, use public methods that are tied to a specific message type.
+        /// </remarks>
+        public Response<bool> DoSimpleValidationCan(Message message, byte priority, byte mode, params byte[] data)
+        {
+            byte[] actual = message.GetBytes();
+            ResponseStatus status;
+
+            byte[] success = new byte[] { 0x00, 0x00, 0x07, 0xE8, (byte)(mode + 0x40), };
+            if (this.TryVerifyInitialBytes(actual, success, out status))
+            {
+                if (data != null && data.Length > 0)
+                {
+                    for (int index = 0; index < data.Length; index++)
+                    {
+                        const int headBytes = 4;
+                        int actualLength = actual.Length;
+                        int expectedLength = data.Length + headBytes;
+                        if (actualLength >= expectedLength)
+                        {
+                            if (actual[headBytes + index] == data[index])
+                            {
+                                continue;
+                            }
+                            else
+                            {
+                                return Response.Create(ResponseStatus.UnexpectedResponse, false);
+                            }
+                        }
+                        else
+                        {
+                            return Response.Create(ResponseStatus.Truncated, false);
+                        }
+                    }
+                }
+
+                return Response.Create(ResponseStatus.Success, true);
+            }
+
+            byte[] failure = new byte[] { 0x00, 0x00, 0x07, 0xE8, 0x7F, mode };
+            if (this.TryVerifyInitialBytes(actual, failure, out status))
+            {
+                return Response.Create(ResponseStatus.Refused, false);
+            }
+
+            return Response.Create(ResponseStatus.UnexpectedResponse, false);
+        }
+
+        /// <summary>
+        /// Check for an accept/reject message with the given mode byte.
+        /// </summary>
+        /// <remarks>
+        /// TODO: Make this private, use public methods that are tied to a specific message type.
+        /// </remarks>
+        public Response<bool> DoSimpleValidationCan(Message message, byte mode, params byte[] data)
+        {
+            byte[] actual = message.GetBytes();
+            ResponseStatus status;
+
+            byte[] success = new byte[] { 0x00, 0x00, 0x07, 0xE8, (byte)(mode + 0x40), };
+            if (this.TryVerifyInitialBytes(actual, success, out status))
+            {
+                if (data != null && data.Length > 0)
+                {
+                    for (int index = 0; index < data.Length; index++)
+                    {
+                        const int headBytes = 4;
+                        int actualLength = actual.Length;
+                        int expectedLength = data.Length + headBytes;
+                        if (actualLength >= expectedLength)
+                        {
+                            if (actual[headBytes + index] == data[index])
+                            {
+                                continue;
+                            }
+                            else
+                            {
+                                return Response.Create(ResponseStatus.UnexpectedResponse, false);
+                            }
+                        }
+                        else
+                        {
+                            return Response.Create(ResponseStatus.Truncated, false);
+                        }
+                    }
+                }
+
+                return Response.Create(ResponseStatus.Success, true);
+            }
+
+            byte[] failure = new byte[] { 0x00, 0x00, 0x07, 0xE8, 0x7F, mode };
+            if (this.TryVerifyInitialBytes(actual, failure, out status))
+            {
+                return Response.Create(ResponseStatus.Refused, false);
+            }
+
+            return Response.Create(ResponseStatus.UnexpectedResponse, false);
+        }
+
+        /// <summary>
         /// Confirm that the first portion of the 'actual' array of bytes matches the 'expected' array of bytes.
         /// </summary>
         private bool TryVerifyInitialBytes(Message actual, byte[] expected, out ResponseStatus status)

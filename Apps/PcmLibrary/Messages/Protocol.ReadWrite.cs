@@ -50,6 +50,37 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Create a block message from the supplied arguments.
+        /// </summary>
+        public Message CreateBlockMessageCan(byte[] Payload, int Offset, int Length, int Address, BlockCopyType copyType)
+        {
+            byte[] Buffer = new byte[10 + Length];
+            byte[] Header = new byte[10];
+
+            byte Addr1 = unchecked((byte)(Address >> 24));
+            byte Addr2 = unchecked((byte)(Address >> 16));
+            byte Addr3 = unchecked((byte)(Address >> 8));
+            byte Addr4 = unchecked((byte)(Address & 0xFF));
+
+            Header[0] = 0x00;
+            Header[1] = 0x00;
+            Header[2] = 0x07;
+            Header[3] = 0xE0;
+            Header[4] = Mode.PCMUpload;
+            Header[5] = (byte)copyType;
+            Header[6] = Addr1;
+            Header[7] = Addr2;
+            Header[8] = Addr3;
+            Header[9] = Addr4;
+
+            System.Buffer.BlockCopy(Header, 0, Buffer, 0, Header.Length);
+            System.Buffer.BlockCopy(Payload, Offset, Buffer, Header.Length, Length);
+
+            return new Message(Buffer);
+        }
+
+
+        /// <summary>
         /// Create a request to uploade size bytes to the given address
         /// </summary>
         /// <remarks>
@@ -59,6 +90,12 @@ namespace PcmHacking
         {
             switch (info.HardwareType)
             {
+                case PcmType.E92:
+                    byte[] requestBytesE92 = { 0x00, 0x00, 0x07, 0xE0, Mode.PCMUploadRequest, 0x00, 0x00, 0x00, 0x00 };
+                    requestBytesE92[7] = unchecked((byte)(Size >> 8));
+                    requestBytesE92[8] = unchecked((byte)(Size & 0xFF));
+                    return new Message(requestBytesE92);
+
                 case PcmType.P10:
                 case PcmType.P12:
                     byte[] requestBytesP12 = { Priority.Physical0, DeviceId.Pcm, DeviceId.Tool, Mode.PCMUploadRequest };
@@ -85,15 +122,57 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Create a request to retrieve a 'seed' value from the PCM
+        /// </summary>
+        public Message CreateProgrammingModeRequest()
+        {
+            byte[] Bytes = new byte[] { 0x00, 0x00, 0x07, 0xE0, Mode.ProgrammingMode, Submode.requestProgrammingMode };
+            return new Message(Bytes);
+        }
+
+        /// <summary>
+        /// Create a request to retrieve a 'seed' value from the PCM
+        /// </summary>
+        public Message CreateProgrammingModeEnable()
+        {
+            byte[] Bytes = new byte[] { 0x00, 0x00, 0x07, 0xE0, Mode.ProgrammingMode, Submode.enableProgrammingMode };
+            return new Message(Bytes);
+        }
+
+        /// <summary>
+        /// Indicates whether or not the reponse indicates that the PCM is unlocked.
+        /// </summary>
+        public bool ParseProgrammingModeResponse(byte[] response)
+        {
+            ResponseStatus status;
+            byte[] expected = { 0x00, 0x00, 0x07, 0xE8, Mode.ProgrammingMode + Mode.Response };
+
+            if (TryVerifyInitialBytes(response, expected, out status))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Parse the response to a request for permission to upload a RAM kernel (or part of a kernel).
         /// </summary>
         public Response<bool> ParseUploadPermissionResponse(PcmInfo info, Message message)
         {
             switch (info.HardwareType)
             {
+                case PcmType.E92:
+                    Response<bool> response = this.DoSimpleValidationCan(message, Mode.PCMUploadRequest);
+                    if (response.Status == ResponseStatus.Success || response.Status == ResponseStatus.Refused)
+                    {
+                        return response;
+                    }
+                    break;
+
                 case PcmType.P10:
                 case PcmType.P12:
-                    Response<bool> response = this.DoSimpleValidation(message, Priority.Physical0, Mode.PCMUploadRequest);
+                    response = this.DoSimpleValidation(message, Priority.Physical0, Mode.PCMUploadRequest);
                     if (response.Status == ResponseStatus.Success || response.Status == ResponseStatus.Refused)
                     {
                         return response;
@@ -131,6 +210,15 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Parse the response to an upload-to-RAM request.
+        /// </summary>
+        public Response<bool> ParseUploadResponseCan(Message message)
+        {
+            Response<bool> response = this.DoSimpleValidationCan(message, Mode.PCMUpload);
+            return response;
+        }
+
+        /// <summary>
         /// Create a request to read an arbitrary address range.
         /// </summary>
         /// <remarks>
@@ -152,6 +240,35 @@ namespace PcmHacking
             {
                 return new Message(request);
             }
+        }
+
+        /// <summary>
+        /// Create a request to read an arbitrary address range.
+        /// </summary>
+        /// <remarks>
+        /// This command is only understood by the reflash kernel.
+        /// </remarks>
+        /// <param name="startAddress">Address of the first byte to read.</param>
+        /// <param name="length">Number of bytes to read.</param>
+        /// <returns></returns>
+        public Message CreateReadRequestCan(int startAddress, int length)
+        {
+            byte[] request = new byte[11];
+
+            request[0] = 0x00;
+            request[1] = 0x00;
+            request[2] = 0x07;
+            request[3] = 0xE0;
+            request[4] = Mode.GetRam;
+            request[5] = (byte)(startAddress >> 24);
+            request[6] = (byte)(startAddress >> 16);
+            request[7] = (byte)(startAddress >> 8);
+            request[8] = (byte)(startAddress & 0xFF);
+            request[9] = (byte)(length >> 8);
+            request[10] = (byte)(length & 0xFF);
+
+            return new Message(request);
+
         }
 
         /// <summary>
@@ -223,6 +340,45 @@ namespace PcmHacking
             {
                 return Response.Create(ResponseStatus.Error, result);
             }
+        }
+
+        /// <summary>
+        /// Parse the payload of a read request.
+        /// </summary>
+        /// <remarks>
+        /// It is the callers responsability to check the ResponseStatus for errors
+        /// </remarks>
+        public Response<byte[]> ParsePayloadCan(Message message, int length, int expectedAddress)
+        {
+            byte[] actual = message.GetBytes();
+            byte[] expected = new byte[] { 0x00, 0x00, 0x07, 0xE8, Mode.GetRam + Mode.Response };
+            if (!TryVerifyInitialBytes(actual, expected, out ResponseStatus status))
+            {
+                return Response.Create(status, new byte[0]);
+            }
+
+            // Ensure that we can read the data length and start address from the message.
+            if (actual.Length < 9)
+            {
+                return Response.Create(ResponseStatus.Truncated, new byte[0]);
+            }
+
+            // Read the data length.
+            int dataLength = actual.Length - 9;
+
+            // Read and validate the data start address.
+            int actualAddress = ((actual[5] << 24) + (actual[6] << 16) + (actual[7] << 8) + actual[8]);
+            if (actualAddress != expectedAddress)
+            {
+                return Response.Create(ResponseStatus.UnexpectedResponse, new byte[0]);
+            }
+
+            byte[] result = new byte[dataLength];
+
+            Buffer.BlockCopy(actual, 9, result, 0, dataLength);
+
+            return Response.Create(ResponseStatus.Success, result);
+
         }
     }
 }

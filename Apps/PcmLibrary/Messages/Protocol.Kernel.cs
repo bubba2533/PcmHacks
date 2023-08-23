@@ -169,5 +169,14 @@ namespace PcmHacking
             byte[] bytes = new byte[] { Priority.Physical0, DeviceId.Pcm, DeviceId.Tool, 0x20 };
             return new Message(bytes);
         }
+
+        /// <summary>
+        /// Create a message to tell the RAM-resident kernel to exit.
+        /// </summary>
+        public Message CreateExitKernelCan()
+        {
+            byte[] bytes = new byte[] { 0x00, 0x00, 0x07, 0xE0, 0x20 };
+            return new Message(bytes);
+        }
     }
 }

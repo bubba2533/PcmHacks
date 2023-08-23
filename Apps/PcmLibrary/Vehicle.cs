@@ -96,6 +96,16 @@ namespace PcmHacking
             get => this.device.Enable4xReadWrite;
         }
 
+        public bool EnableCan
+        {
+            set
+            {
+                this.device.EnableCan = value;
+            }
+
+            get => this.device.EnableCan;
+        }
+
         public Int32 UserDefinedKey
         {
             get; set;
@@ -273,7 +283,16 @@ namespace PcmHacking
             this.device.ClearMessageQueue();
 
             this.logger.AddDebugMessage("Sending seed request.");
-            Message seedRequest = this.protocol.CreateSeedRequest();
+
+            Message seedRequest;
+            if (this.EnableCan)
+            {
+                seedRequest = this.protocol.CreateSeedRequestCan();
+            }
+            else
+            {
+                seedRequest = this.protocol.CreateSeedRequest();
+            }
 
             if (!await this.TrySendMessage(seedRequest, "seed request"))
             {
@@ -300,7 +319,16 @@ namespace PcmHacking
                 }
 
                 this.logger.AddDebugMessage("Parsing seed value.");
-                Response<UInt16> seedValueResponse = this.protocol.ParseSeed(seedResponse.GetBytes());
+                Response<UInt16> seedValueResponse;
+                if (this.EnableCan)
+                {
+                    seedValueResponse = this.protocol.ParseSeedCan(seedResponse.GetBytes());
+                }
+                else
+                {
+                    seedValueResponse = this.protocol.ParseSeed(seedResponse.GetBytes());
+                }
+                    
                 if (seedValueResponse.Status == ResponseStatus.Success)
                 {
                     seedValue = seedValueResponse.Value;
@@ -326,7 +354,24 @@ namespace PcmHacking
             UInt16 key;
             if (UserDefinedKey == -1)
             {
+
                 key = KeyAlgorithm.GetKey(keyAlgorithm, seedValue);
+
+                var key2 = ((seedValue & 0x0000FF00) >> 8) | ((seedValue & 0x000000FF) << 8);
+                key2 = key2 + 0xA442 & 0x0000ffff;
+                int tempseed1 = key2 >> 0x4;
+                int tempseed2 = key2 << 0xC;
+                key2 = (tempseed1 | tempseed2);
+                key2 += 0xFF37;
+                key2 = ~key2;
+                key2 &= 0xffff;
+
+                if (this.EnableCan)
+                {
+                    key = (ushort)key2;
+                }
+
+
             }
             else
             {
@@ -362,6 +407,50 @@ namespace PcmHacking
 
             this.logger.AddUserMessage("Unable to process unlock response.");
             return false;
+        }
+
+        /// <summary>
+        /// Request to enter programming mode and then enter if request is sucessful.
+        /// </summary>
+        public async Task<bool> EnterProgrammingMode()
+        {
+            await this.device.SetTimeout(TimeoutScenario.ReadProperty);
+
+            this.device.ClearMessageQueue();
+
+            this.logger.AddDebugMessage("Sending programming mode request.");
+            Message programmingModeRequest = this.protocol.CreateProgrammingModeRequest();
+
+            if (!await this.device.SendMessage(programmingModeRequest))
+            {
+                this.logger.AddDebugMessage("Unable to send programming mode request.");
+                return false;
+            }
+
+            Message programmingModeResponse = await this.device.ReceiveMessage();
+            if (programmingModeResponse == null)
+            {
+                this.logger.AddDebugMessage("No response to programming mode request.");
+                return false;
+            }
+
+            if (!this.protocol.ParseProgrammingModeResponse(programmingModeResponse.GetBytes()))
+            {
+                this.logger.AddDebugMessage("PCM rejected programming mode request.");
+                return false;
+            }
+
+            this.logger.AddDebugMessage("PCM accepted programming mode request.");
+            programmingModeRequest = this.protocol.CreateProgrammingModeEnable();
+
+            if (!await this.device.SendMessage(programmingModeRequest))
+            {
+                this.logger.AddDebugMessage("Unable to send programming mode enable.");
+                return false;
+            }
+
+            return true;
+
         }
 
         /// <summary>

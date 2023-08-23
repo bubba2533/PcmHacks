@@ -22,8 +22,18 @@ namespace PcmHacking
         /// </summary>
         public async Task SuppressChatter()
         {
-            this.logger.AddDebugMessage("Suppressing VPW chatter.");
-            Message suppressChatter = this.protocol.CreateDisableNormalMessageTransmission();
+            this.logger.AddDebugMessage("Suppressing Comm Bus chatter.");
+            Message suppressChatter;
+
+            if (this.EnableCan)
+            {
+                suppressChatter = this.protocol.CreateDisableNormalMessageTransmissionCan();
+            }
+            else
+            {
+                suppressChatter = this.protocol.CreateDisableNormalMessageTransmission();
+            }
+
             await this.device.SendMessage(suppressChatter);
             await this.notifier.ForceNotify();
 
@@ -161,14 +171,26 @@ namespace PcmHacking
         /// </remarks>
         public async Task ExitKernel()
         {
-            Message exitKernel = this.protocol.CreateExitKernel();
+            Message exitKernel;
+
+            if (this.EnableCan)
+            {
+                exitKernel= this.protocol.CreateExitKernelCan();
+            }
+            else
+            {
+                exitKernel = this.protocol.CreateExitKernel();
+            }
 
             this.device.ClearMessageQueue();
-            if (device.Supports4X)
+            if (!device.EnableCan)
             {
-                await device.SetVpwSpeed(VpwSpeed.FourX);
-                await this.device.SendMessage(exitKernel);
-                await device.SetVpwSpeed(VpwSpeed.Standard);
+                if (device.Supports4X)
+                {
+                    await device.SetVpwSpeed(VpwSpeed.FourX);
+                    await this.device.SendMessage(exitKernel);
+                    await device.SetVpwSpeed(VpwSpeed.Standard);
+                }
             }
 
             await this.device.SendMessage(exitKernel);
@@ -190,21 +212,35 @@ namespace PcmHacking
             // The response is not checked because the priority byte and destination address are odd.
             // Different devices will handle this differently. Scantool won't recieve it.
             // so we send it twice just to be sure.
-            Message clearCodesRequest = this.protocol.CreateClearDiagnosticTroubleCodesRequest();
+            Message clearCodesRequest;
+            if (this.EnableCan)
+            {
+                clearCodesRequest = this.protocol.CreateClearDiagnosticTroubleCodesRequestCan();
+            }
+            else
+            {
+                clearCodesRequest = this.protocol.CreateClearDiagnosticTroubleCodesRequest();
+            }
+            
 
             await Task.Delay(250);
             await this.device.SendMessage(clearCodesRequest);
             await Task.Delay(250);
             await this.device.SendMessage(clearCodesRequest);
 
-            // This is a conventional message, but the response from the PCM might get lost 
-            // among the responses from other modules on the bus, so again we just send it twice.
-            Message clearDiagnosticInformationRequest = this.protocol.CreateClearDiagnosticInformationRequest();
+            if (!this.EnableCan)
+            {
+                // This is a conventional message, but the response from the PCM might get lost 
+                // among the responses from other modules on the bus, so again we just send it twice.
+                Message clearDiagnosticInformationRequest = this.protocol.CreateClearDiagnosticInformationRequest();
 
-            await Task.Delay(250);
-            await this.device.SendMessage(clearDiagnosticInformationRequest);
-            await Task.Delay(250);
-            await this.device.SendMessage(clearDiagnosticInformationRequest);
+                await Task.Delay(250);
+                await this.device.SendMessage(clearDiagnosticInformationRequest);
+                await Task.Delay(250);
+                await this.device.SendMessage(clearDiagnosticInformationRequest);
+            }
+
+
         }
 
         /// <summary>
@@ -447,6 +483,147 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Load the executable payload on the PCM at the supplied address, and execute it.
+        /// </summary>
+        public async Task<bool> PCMExecuteCan(PcmInfo info, byte[] payload, CancellationToken cancellationToken)
+        {
+
+            int loadAddress = info.KernelBaseAddress;
+
+            logger.AddDebugMessage($"Sending upload request for kernel size {payload.Length}, loadaddress {loadAddress.ToString("X8")}");
+
+            Query<bool> uploadPermissionQuery = new Query<bool>(
+                this.device,
+                () => protocol.CreateUploadRequest(info, payload.Length),
+                (message) => protocol.ParseUploadPermissionResponse(info, message),
+                this.logger,
+                cancellationToken,
+                this.notifier);
+
+            Response<bool> permissionResponse = await uploadPermissionQuery.Execute();
+            bool uploadAllowed = permissionResponse.Status == ResponseStatus.Success && permissionResponse.Value;
+
+            if (!uploadAllowed)
+            {
+                logger.AddUserMessage(
+                    $"Permission to upload Kernel was denied." +
+                    Environment.NewLine +
+                    "If this persists, try cutting power to the PCM, restoring power, waiting ten seconds, and trying again."
+                    );
+                return false;
+            }
+
+            logger.AddDebugMessage($"Going to load a {payload.Length} byte kernel to 0x{loadAddress.ToString("X6")}");
+
+            await this.device.SetTimeout(TimeoutScenario.SendKernel);
+
+            // Loop through the payload building and sending packets, highest first, execute on last
+            int payloadSize = 4096;
+
+            int chunkCount = payload.Length / payloadSize;
+            int remainder = payload.Length % payloadSize;
+
+            int offset = (chunkCount * payloadSize);
+            int startAddress = loadAddress + offset;
+
+            // First we send the 'remainder' payload, containing any bytes that won't fill up an entire upload packet.
+            logger.AddDebugMessage($"Sending end block payload with offset 0x{offset:X}, start address 0x{startAddress:X}, length 0x{remainder:X}.");
+
+            Message remainderMessage = protocol.CreateBlockMessageCan(
+                payload,
+                offset,
+                remainder,
+                loadAddress + offset,
+                BlockCopyType.Copy);
+
+            await notifier.Notify();
+            Response<bool> uploadResponse = await WritePayload(remainderMessage, cancellationToken);
+            if (uploadResponse.Status != ResponseStatus.Success)
+            {
+                logger.AddDebugMessage($"Could not upload kernel to PCM, remainder payload not accepted.");
+                return false;
+            }
+
+            // Now we send a series of full upload packets
+            // Note that there's a notifier.Notify() call inside the WritePayload() call in this loop.
+            for (int chunkIndex = chunkCount; chunkIndex > 0; chunkIndex--)
+            {
+                int bytesSent = payload.Length - offset;
+                int percentDone = bytesSent * 100 / payload.Length;
+
+                this.logger.AddUserMessage($"Kernel upload {percentDone}% complete.");
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                offset = (chunkIndex - 1) * payloadSize;
+                startAddress = loadAddress + offset;
+
+                Message payloadMessage = protocol.CreateBlockMessageCan(
+                    payload,
+                    offset,
+                    payloadSize,
+                    startAddress,
+                    BlockCopyType.Copy);
+
+                logger.AddDebugMessage($"Sending block with offset 0x{offset:X6}, start address 0x{startAddress:X6}, length 0x{payloadSize:X4}.");
+
+                uploadResponse = await WritePayload(payloadMessage, cancellationToken);
+                if (uploadResponse.Status != ResponseStatus.Success)
+                {
+                    logger.AddDebugMessage($"Could not upload {(info.LoaderRequired ? "loader" : "kernel")} to PCM, payload not accepted.");
+                    return false;
+                }
+            }
+
+            Message executeMessage = protocol.CreateBlockMessageCan(
+                    payload,
+                    offset,
+                    0,
+                    startAddress,
+                    BlockCopyType.Execute);
+
+            uploadResponse = await WritePayload(executeMessage, cancellationToken);
+            if (uploadResponse.Status != ResponseStatus.Success)
+            {
+                logger.AddDebugMessage($"Could not execute kernel, command not accepted.");
+                return false;
+            }
+
+            this.logger.AddUserMessage($"{(info.LoaderRequired ? "Loader" : "Kernel")} upload 100% complete.");
+
+            if (ReportKernelID && info.KernelVersionSupport)
+            {
+                // Consider: Allowing caller to call GetKernelVersion(...)?
+                // Consider: return kernel version rather than boolean?
+                UInt32 kernelVersion = await this.GetKernelVersion();
+                if (kernelVersion == 0)
+                {
+                    this.logger.AddUserMessage($"{(info.LoaderRequired ? "Loader" : "Kernel")} failed to start.");
+                    return false;
+                }
+                this.logger.AddUserMessage($"{(info.LoaderRequired ? "Loader" : "Kernel")} Version: {kernelVersion.ToString("X8")}");
+
+                // Detect an Assemply Kernel, // Remove with the C Kernels
+                if (kernelVersion > 0x82400000)
+                {
+                    info.AssemblyKernel = true;
+                }
+            }
+
+            if (info.LoaderRequired)
+            {
+                // Switch modes to Kernel, Loader is already on PCM.
+                // It has outlived it's usefulness, so use it for Loader vs Kernel state switch.
+                info.LoaderRequired = false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Does everything required to switch to VPW 4x
         /// </summary>
         public async Task<bool> VehicleSetVPW4x(VpwSpeed newSpeed)
@@ -604,7 +781,7 @@ namespace PcmHacking
                     continue;
                 }
 
-                if (await WaitForSuccess(this.protocol.ParseUploadResponse, cancellationToken))
+                if (await WaitForSuccess(this.protocol.ParseUploadResponseCan, cancellationToken))
                 {
                     return Response.Create(ResponseStatus.Success, true, retryCount);
                 }

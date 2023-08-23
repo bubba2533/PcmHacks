@@ -830,63 +830,67 @@ namespace PcmHacking
                     this.AddUserMessage("OS ID query failed: " + osResponse.Status.ToString());
                 }
 
-                var calResponse = await this.Vehicle.QueryCalibrationId();
-                if (calResponse.Status == ResponseStatus.Success)
+                if (!this.Vehicle.EnableCan)
                 {
-                    this.AddUserMessage("Calibration ID: " + calResponse.Value.ToString());
-                }
-                else
-                {
-                    this.AddUserMessage("Calibration ID query failed: " + calResponse.Status.ToString());
-                }
-
-                // Disable HardwareID lookup for the P10, P12 and E54.
-                if (pcmInfo != null && pcmInfo.HardwareType != PcmType.P10 && pcmInfo.HardwareType != PcmType.P12 && pcmInfo.HardwareType != PcmType.E54)
-                {
-                    var hardwareResponse = await this.Vehicle.QueryHardwareId();
-                    if (hardwareResponse.Status == ResponseStatus.Success)
+                    var calResponse = await this.Vehicle.QueryCalibrationId();
+                    if (calResponse.Status == ResponseStatus.Success)
                     {
-                        this.AddUserMessage("Hardware ID: " + hardwareResponse.Value.ToString());
+                        this.AddUserMessage("Calibration ID: " + calResponse.Value.ToString());
                     }
                     else
                     {
-                        this.AddUserMessage("Hardware ID query failed: " + hardwareResponse.Status.ToString());
+                        this.AddUserMessage("Calibration ID query failed: " + calResponse.Status.ToString());
                     }
-                }
 
-                var serialResponse = await this.Vehicle.QuerySerial();
-                if (serialResponse.Status == ResponseStatus.Success)
-                {
-                    this.AddUserMessage("Serial Number: " + serialResponse.Value.ToString());
-                }
-                else
-                {
-                    this.AddUserMessage("Serial Number query failed: " + serialResponse.Status.ToString());
-                }
-
-                // Disable BCC lookup for the P04
-                if (pcmInfo != null && pcmInfo.HardwareType != PcmType.P04 && pcmInfo.HardwareType != PcmType.P08)
-                {
-                    var bccResponse = await this.Vehicle.QueryBCC();
-                    if (bccResponse.Status == ResponseStatus.Success)
+                    // Disable HardwareID lookup for the P10, P12 and E54.
+                    if (pcmInfo != null && pcmInfo.HardwareType != PcmType.P10 && pcmInfo.HardwareType != PcmType.P12 && pcmInfo.HardwareType != PcmType.E54)
                     {
-                        this.AddUserMessage("Broad Cast Code: " + bccResponse.Value.ToString());
+                        var hardwareResponse = await this.Vehicle.QueryHardwareId();
+                        if (hardwareResponse.Status == ResponseStatus.Success)
+                        {
+                            this.AddUserMessage("Hardware ID: " + hardwareResponse.Value.ToString());
+                        }
+                        else
+                        {
+                            this.AddUserMessage("Hardware ID query failed: " + hardwareResponse.Status.ToString());
+                        }
+                    }
+
+                    var serialResponse = await this.Vehicle.QuerySerial();
+                    if (serialResponse.Status == ResponseStatus.Success)
+                    {
+                        this.AddUserMessage("Serial Number: " + serialResponse.Value.ToString());
                     }
                     else
                     {
-                        this.AddUserMessage("BCC query failed: " + bccResponse.Status.ToString());
+                        this.AddUserMessage("Serial Number query failed: " + serialResponse.Status.ToString());
+                    }
+
+                    // Disable BCC lookup for the P04
+                    if (pcmInfo != null && pcmInfo.HardwareType != PcmType.P04 && pcmInfo.HardwareType != PcmType.P08)
+                    {
+                        var bccResponse = await this.Vehicle.QueryBCC();
+                        if (bccResponse.Status == ResponseStatus.Success)
+                        {
+                            this.AddUserMessage("Broad Cast Code: " + bccResponse.Value.ToString());
+                        }
+                        else
+                        {
+                            this.AddUserMessage("BCC query failed: " + bccResponse.Status.ToString());
+                        }
+                    }
+
+                    var mecResponse = await this.Vehicle.QueryMEC();
+                    if (mecResponse.Status == ResponseStatus.Success)
+                    {
+                        this.AddUserMessage("MEC: " + mecResponse.Value.ToString());
+                    }
+                    else
+                    {
+                        this.AddUserMessage("MEC query failed: " + mecResponse.Status.ToString());
                     }
                 }
-
-                var mecResponse = await this.Vehicle.QueryMEC();
-                if (mecResponse.Status == ResponseStatus.Success)
-                {
-                    this.AddUserMessage("MEC: " + mecResponse.Value.ToString());
-                }
-                else
-                {
-                    this.AddUserMessage("MEC query failed: " + mecResponse.Status.ToString());
-                }
+                
             }
             catch (Exception exception)
             {
@@ -1161,14 +1165,17 @@ namespace PcmHacking
                     string path = "";
                     this.Invoke((MethodInvoker)delegate ()
                     {
-                        this.AddUserMessage($"WARNING: This version uses the new Assembly Kernels, USE AT YOUR OWN RISK!");
-                        string msg = $"WARNING!{Environment.NewLine}This version uses the new Assembly Kernels, USE AT YOUR OWN RISK!" +
-                                     $"{Environment.NewLine}{Environment.NewLine}Are you willing to accept the responsibility ?";
-                        DialogResult warnDialogResult = MessageBox.Show(msg, "Continue?", MessageBoxButtons.YesNo);
-                        if (warnDialogResult == DialogResult.No)
+                        if (!this.Vehicle.EnableCan)
                         {
-                            this.AddUserMessage("User chose not to proceed.");
-                            return;
+                            this.AddUserMessage($"WARNING: This version uses the new Assembly Kernels, USE AT YOUR OWN RISK!");
+                            string msg = $"WARNING!{Environment.NewLine}This version uses the new Assembly Kernels, USE AT YOUR OWN RISK!" +
+                                         $"{Environment.NewLine}{Environment.NewLine}Are you willing to accept the responsibility ?";
+                            DialogResult warnDialogResult = MessageBox.Show(msg, "Continue?", MessageBoxButtons.YesNo);
+                            if (warnDialogResult == DialogResult.No)
+                            {
+                                this.AddUserMessage("User chose not to proceed.");
+                                return;
+                            }
                         }
 
                         path = this.ShowSaveAsDialog();
@@ -1241,7 +1248,7 @@ namespace PcmHacking
                         AddUserMessage($"Using OsID: {pcmInfo.OSID}");
                     }
 
-                    if (pcmInfo.HardwareType == PcmType.P04 || pcmInfo.HardwareType == PcmType.P08 || pcmInfo.HardwareType == PcmType.E54)
+                    if (pcmInfo.HardwareType == PcmType.P04 || pcmInfo.HardwareType == PcmType.P08 || pcmInfo.HardwareType == PcmType.E54 || pcmInfo.HardwareType == PcmType.E92)
                     {
                         string msg = $"WARNING: {pcmInfo.HardwareType.ToString()} Support is still in development.";
                         this.AddUserMessage(msg);
@@ -1269,6 +1276,20 @@ namespace PcmHacking
                         return;
                     }
 
+
+                    if (this.Vehicle.EnableCan)
+                    {
+                        this.AddUserMessage("Requesting to enter programming mode.");
+                        bool programingModeResponse = await this.Vehicle.EnterProgrammingMode();
+                        if (!programingModeResponse)
+                        {
+                            this.AddUserMessage("Programming mode entry failed.");
+                            return;
+                        }
+                        this.AddUserMessage("Programming mode entered.");
+                    }
+              
+
                     // Do the actual reading.
                     DateTime start = DateTime.Now;
 
@@ -1277,7 +1298,17 @@ namespace PcmHacking
                         pcmInfo,
                         this);
 
-                    Response<Stream> readResponse = await reader.ReadContents(cancellationTokenSource.Token);
+                    Response<Stream> readResponse;
+
+                    if (Vehicle.EnableCan)
+                    {
+                        readResponse = await reader.ReadContentsCan(cancellationTokenSource.Token);
+                    }
+                    else
+                    {
+                        readResponse = await reader.ReadContents(cancellationTokenSource.Token);
+                    }
+                    
 
                     this.AddUserMessage("Elapsed time " + DateTime.Now.Subtract(start));
                     if (readResponse.Status != ResponseStatus.Success)

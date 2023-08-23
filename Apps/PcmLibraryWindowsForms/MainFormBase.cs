@@ -93,6 +93,7 @@ namespace PcmHacking
                     }
 
                     DeviceConfiguration.Settings.Enable4xReadWrite = picker.Enable4xReadWrite;
+                    DeviceConfiguration.Settings.EnableCan = picker.EnableCan;
                     DeviceConfiguration.Settings.DeviceCategory = picker.DeviceCategory;
                     DeviceConfiguration.Settings.J2534DeviceType = picker.J2534DeviceType;
                     DeviceConfiguration.Settings.SerialPort = picker.SerialPort;
@@ -214,6 +215,7 @@ namespace PcmHacking
                     DeviceConfiguration.Settings.Save();
                 }
                 this.vehicle.Enable4xReadWrite = DeviceConfiguration.Settings.Enable4xReadWrite;
+                this.vehicle.EnableCan = DeviceConfiguration.Settings.EnableCan;
             });
 
             await this.ValidDeviceSelectedAsync(this.vehicle.DeviceDescription);

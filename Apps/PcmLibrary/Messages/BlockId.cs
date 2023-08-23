@@ -26,6 +26,7 @@ namespace PcmHacking
         public const byte SpeedCalID         = 0x11; // Speed Calibration ID
         public const byte BCC                = 0x14; // Broad Cast Code
         public const byte OilLifePerc        = 0x6D; // Oil Life Remaining Percent
+        public const byte VinCan             = 0x90; // CAN Bus VIN
         public const byte OperatingSystemLvl = 0x93; // Operating System Level
         public const byte EngineCalLvl       = 0x94; // Engine Segment Calibration Level
         public const byte EngineDiagCalLvl   = 0x95; // Engine Diagnostic Calibration Level
@@ -35,5 +36,6 @@ namespace PcmHacking
         public const byte SystemCalLvl       = 0x99; // System Segment Calibration Level
         public const byte SpeedCalLvl        = 0x9A; // Speed Calibration Level
         public const byte MEC                = 0xA0; // Manufacturers Enable Counter
+        public const byte OperatingSystemIDCan = 0xC1; // Operating System ID aka OSID
     }
 }

@@ -17,7 +17,8 @@ namespace PcmHacking
         P12,
         E54,
         LLY,
-        BLACKBOX
+        BLACKBOX,
+        E92
     }
 
     /// <summary>
@@ -2225,6 +2226,22 @@ namespace PcmHacking
                     this.ImageSize = 2048 * 1024;
                     this.ValidationMethod = PcmType.P12;
                     this.HardwareType = PcmType.P12;
+                    break;
+
+                // E92 Can Bus ECU
+                case 12664769:
+                    this.KernelFileName = "Kernel-E92.bin";
+                    this.KernelBaseAddress = 0x40008000;
+                    this.RAMSize = 0x4000;
+                    this.IsSupported = false;
+                    this.Description = "E92 4m Gen-5";
+                    this.ImageBaseAddress = 0x0;
+                    this.ImageSize = 2048 * 2048;
+                    this.ValidationMethod = PcmType.E92;
+                    this.HardwareType = PcmType.E92;
+                    this.FlashIDSupport = false;
+                    this.KernelVersionSupport = false;
+                    this.LoaderRequired = false;
                     break;
 
                 default:

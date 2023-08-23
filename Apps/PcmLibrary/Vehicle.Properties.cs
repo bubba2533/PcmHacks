@@ -25,6 +25,23 @@ namespace PcmHacking
 
             this.device.ClearMessageQueue();
 
+            if (this.EnableCan)
+            {
+                if (!await this.device.SendMessage(this.protocol.CreateVinRequestCan()))
+                {
+                    return Response.Create(ResponseStatus.Timeout, "Unknown. Request for VIN failed.");
+                }
+
+                Message response = await this.device.ReceiveMessage();
+                if (response == null)
+                {
+                    return Response.Create(ResponseStatus.Timeout, "Unknown. No response to request for VIN.");
+                }
+
+                return this.protocol.ParseVinResponsesCan(response.GetBytes());
+            }
+           
+            // VPW Request
             if (!await this.device.SendMessage(this.protocol.CreateVinRequest1()))
             {
                 return Response.Create(ResponseStatus.Timeout, "Unknown. Request for block 1 failed.");
@@ -59,6 +76,7 @@ namespace PcmHacking
             }
 
             return this.protocol.ParseVinResponses(response1.GetBytes(), response2.GetBytes(), response3.GetBytes());
+            
         }
 
         /// <summary>
@@ -179,6 +197,11 @@ namespace PcmHacking
         public async Task<Response<UInt32>> QueryOperatingSystemId(CancellationToken cancellationToken)
         {
             await this.device.SetTimeout(TimeoutScenario.ReadProperty);
+
+            if (this.device.EnableCan)
+            {
+                return await this.QueryUnsignedValue(this.protocol.CreateOperatingSystemIdReadRequestCan, cancellationToken);
+            }
             return await this.QueryUnsignedValue(this.protocol.CreateOperatingSystemIdReadRequest, cancellationToken);
         }
 

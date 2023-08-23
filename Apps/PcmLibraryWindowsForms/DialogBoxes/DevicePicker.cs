@@ -43,6 +43,11 @@ namespace PcmHacking
         public bool Enable4xReadWrite { get; set; }
 
         /// <summary>
+        /// Enable Disable CAN Communication.
+        /// </summary>
+        public bool EnableCan { get; set; }
+
+        /// <summary>
         /// Prompt to put into drop-down lists to let the user know that they need to make a selection.
         /// </summary>
         private const string prompt = "Select...";
@@ -336,6 +341,11 @@ namespace PcmHacking
             }
 
             device.Dispose();
+        }
+
+        private void enableCan_CheckedChanged(object sender, EventArgs e)
+        {
+            this.EnableCan = this.enableCanCheckBox.Checked;
         }
     }
 }

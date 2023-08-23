@@ -23,6 +23,19 @@ namespace PcmHacking
         /// Tell the bus that a test device is present.
         /// </summary>
         /// <remarks>
+        /// Changing the priority byte to Physical0 (rather than Physical0High) 
+        /// broke PCM Hammer's flash operations. 
+        /// </remarks>
+        public Message CreateTestDevicePresentNotificationCan()
+        {
+            byte[] bytes = new byte[] { 0x00, 0x00, 0x07, 0xE0, Mode.TestDevicePresentCan };
+            return new Message(bytes);
+        }
+
+        /// <summary>
+        /// Tell the bus that a test device is present.
+        /// </summary>
+        /// <remarks>
         /// Using Physical0 priority keeps subsequent data log messages using 
         /// Physical0. Using Physical0High caused the PCM to switch to 
         /// Physical0High for subsequent data log messages. Using Physical0
@@ -44,6 +57,15 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Create a message telling the ecu to clear diagnostic trouble codes.
+        /// </summary>
+        public Message CreateClearDiagnosticTroubleCodesRequestCan()
+        {
+            byte[] bytes = new byte[] { 0x00, 0x00, 0x07, 0xE0, Mode.ClearDiagnosticTroubleCodes };
+            return new Message(bytes);
+        }
+
+        /// <summary>
         /// Create a broadcast message telling all modules to clear diagnostic information.
         /// </summary>
         public Message CreateClearDiagnosticInformationRequest()
@@ -58,6 +80,15 @@ namespace PcmHacking
         public Message CreateDisableNormalMessageTransmission()
         {
             byte[] Bytes = new byte[] { Priority.Physical0, DeviceId.Broadcast, DeviceId.Tool, Mode.SilenceBus, Submode.Null };
+            return new Message(Bytes);
+        }
+
+        /// <summary>
+        /// Create a broadcast message telling all devices to disable normal message transmission (disable chatter)
+        /// </summary>
+        public Message CreateDisableNormalMessageTransmissionCan()
+        {
+            byte[] Bytes = new byte[] { 0x00, 0x00, 0x07, 0xE0, Mode.SilenceBus };
             return new Message(Bytes);
         }
 

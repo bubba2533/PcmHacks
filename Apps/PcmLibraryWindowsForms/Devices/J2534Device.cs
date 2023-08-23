@@ -34,7 +34,7 @@ namespace PcmHacking
         public bool IsProtocolOpen;
         public bool IsJ2534Open;
         private const string PortName = "J2534";
-        private const uint MessageFilter = 0x6CF010;
+        private const uint MessageFilter = 0x000007E8;
         public string ToolName = "";
 
         /// <summary>
@@ -61,8 +61,8 @@ namespace PcmHacking
             J2534Port.LoadedDevice = jport;
 
             // Reduced from 4096+12 for the MDI2
-            this.MaxSendSize = 2048 + 12;    // J2534 Standard is 4KB
-            this.MaxReceiveSize = 2048 + 12; // J2534 Standard is 4KB
+            this.MaxSendSize = 4090;    // J2534 Standard is 4KB
+            this.MaxReceiveSize = 4090; // J2534 Standard is 4KB
             this.Supports4X = true;
             this.SupportsSingleDpidLogging = true;
             this.SupportsStreamLogging = true;
@@ -165,7 +165,7 @@ namespace PcmHacking
             }
 
             // Set Protocol
-            m = ConnectToProtocol(ProtocolID.J1850VPW, BaudRate.J1850VPW_10400, ConnectFlag.NONE);
+            m = ConnectToProtocol(ProtocolID.ISO15765, BaudRate.ISO15765, ConnectFlag.NONE);
             if (m.Status != ResponseStatus.Success)
             {
                 this.Logger.AddUserMessage("Failed to set protocol, J2534 error code: 0x" + m.Value.ToString("X"));
@@ -174,10 +174,10 @@ namespace PcmHacking
             this.Logger.AddDebugMessage("Protocol Set");
 
             // Set filter
-            m = SetFilter(0xFEFFFF, J2534Device.MessageFilter, 0, TxFlag.NONE, FilterType.PASS_FILTER);
+            m = SetFilter(J2534Device.MessageFilter, J2534Device.MessageFilter, 0, TxFlag.ISO15765_FRAME_PAD, FilterType.FLOW_CONTROL_FILTER);
             if (m.Status != ResponseStatus.Success)
             {
-                this.Logger.AddUserMessage("Failed to set filter, J2534 error code: 0x" + m.Value.ToString("X2"));
+                this.Logger.AddUserMessage("Failed to set filter, J2534 error code: 0x" + m.Value.ToString("X"));
                 return false;
             }
 
@@ -442,16 +442,19 @@ namespace PcmHacking
         {
             PassThruMsg maskMsg;
             PassThruMsg patternMsg;
+            PassThruMsg flowMsg;
 
             IntPtr MaskPtr;
             IntPtr PatternPtr;
             IntPtr FlowPtr;
 
-            maskMsg = new PassThruMsg(Protocol, txflag, new Byte[] { (byte)(0xFF & (Mask >> 16)), (byte)(0xFF & (Mask >> 8)), (byte)(0xFF & Mask) });
-            patternMsg = new PassThruMsg(Protocol, txflag, new Byte[] { (byte)(0xFF & (Pattern >> 16)), (byte)(0xFF & (Pattern >> 8)), (byte)(0xFF & Pattern) });
+            maskMsg = new PassThruMsg(Protocol, txflag, new Byte[] { (byte)(0xFF & (Mask >> 24)),  (byte)(0xFF & (Mask >> 16)), (byte)(0xFF & (Mask >> 8)), (byte)(0xFF & Mask) });
+            patternMsg = new PassThruMsg(Protocol, txflag, new Byte[] { (byte)(0xFF & (Pattern >> 24)), (byte)(0xFF & (Pattern >> 16)), (byte)(0xFF & (Pattern >> 8)), (byte)(0xFF & Pattern) });
+            flowMsg = new PassThruMsg(Protocol, txflag, new Byte[] { 0x00, 0x00, 0x07, 0xE0 });
+
             MaskPtr = maskMsg.ToIntPtr();
             PatternPtr = patternMsg.ToIntPtr();
-            FlowPtr = IntPtr.Zero;
+            FlowPtr = flowMsg.ToIntPtr();
 
             int tempfilter = 0;
             OBDError = J2534Port.Functions.PassThruStartMsgFilter((int)ChannelID, Filtertype, MaskPtr, PatternPtr, FlowPtr, ref tempfilter);

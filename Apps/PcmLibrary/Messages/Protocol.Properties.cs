@@ -9,11 +9,31 @@ namespace PcmHacking
         /// <summary>
         /// Create a request to read the given block of PCM memory.
         /// </summary>
+        public Message CreateReadRequestCan(byte Block)
+        {
+            byte[] Bytes = new byte[] { 0x00, 0x00, 0x07, 0xE0, Mode.ReadDataByIdentifier, Block };
+            return new Message(Bytes);
+        }
+
+
+        /// <summary>
+        /// Create a request to read the given block of PCM memory.
+        /// </summary>
         public Message CreateReadRequest(byte Block)
         {
             byte[] Bytes = new byte[] { Priority.Physical0, DeviceId.Pcm, DeviceId.Tool, Mode.ReadBlock, Block };
             return new Message(Bytes);
         }
+
+        /// <summary>
+        /// Create a request to read the PCM's operating system ID.
+        /// </summary>
+        /// <returns></returns>
+        public Message CreateOperatingSystemIdReadRequestCan()
+        {
+            return CreateReadRequestCan(BlockId.OperatingSystemIDCan);
+        }
+
 
         /// <summary>
         /// Create a request to read the PCM's operating system ID.
@@ -70,14 +90,50 @@ namespace PcmHacking
         }
 
         /// <summary>
+        /// Parse a 32-bit value from the first four bytes of a message payload.
+        /// </summary>
+        public Response<UInt32> ParseUInt32Can(Message message, byte responseMode)
+        {
+            byte[] bytes = message.GetBytes();
+            int result = 0;
+            ResponseStatus status;
+
+            byte[] expected = new byte[] { 0x00, 0x00, 0x07, 0xE8, 0x5A, responseMode };
+            if (!TryVerifyInitialBytes(bytes, expected, out status))
+            {
+                return Response.Create(ResponseStatus.Error, (UInt32)result);
+            }
+            if (bytes.Length < 9)
+            {
+                return Response.Create(ResponseStatus.Truncated, (UInt32)result);
+            }
+
+            result = bytes[6] << 24;
+            result += bytes[7] << 16;
+            result += bytes[8] << 8;
+            result += bytes[9];
+
+            return Response.Create(ResponseStatus.Success, (UInt32)result);
+        }
+
+        /// <summary>
         /// Parse the response to a block-read request.
         /// </summary>
         public Response<UInt32> ParseUInt32FromBlockReadResponse(Message message)
         {
-            return ParseUInt32(message, Mode.ReadBlock + Mode.Response);
+            return ParseUInt32(message, BlockId.OperatingSystemIDCan);
         }
 
         #region VIN
+
+        /// <summary>
+        /// Create a request to read the first segment of the PCM's VIN.
+        /// </summary>
+        public Message CreateVinRequestCan()
+        {
+            return CreateReadRequestCan(BlockId.VinCan);
+        }
+
 
         /// <summary>
         /// Create a request to read the first segment of the PCM's VIN.
@@ -133,6 +189,25 @@ namespace PcmHacking
             Buffer.BlockCopy(response1, 6, vinBytes, 0, 5);
             Buffer.BlockCopy(response2, 5, vinBytes, 5, 6);
             Buffer.BlockCopy(response3, 5, vinBytes, 11, 6);
+            string vin = System.Text.Encoding.ASCII.GetString(vinBytes);
+            return Response.Create(ResponseStatus.Success, vin);
+        }
+        /// <summary>
+        /// Parse the responses to the three requests for VIN information.
+        /// </summary>
+        public Response<string> ParseVinResponsesCan(byte[] response)
+        {
+            string result = "Unknown";
+            ResponseStatus status;
+
+            byte[] expected = new byte[] { 0x00, 0x00, 0x07, 0xE8, 0x5A, BlockId.VinCan };
+            if (!TryVerifyInitialBytes(response, expected, out status))
+            {
+                return Response.Create(status, result);
+            }
+
+            byte[] vinBytes = new byte[17];
+            Buffer.BlockCopy(response, 6, vinBytes, 0, 17);
             string vin = System.Text.Encoding.ASCII.GetString(vinBytes);
             return Response.Create(ResponseStatus.Success, vin);
         }
